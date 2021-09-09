@@ -1,0 +1,114 @@
+CDP-DC kafka useful kafka commands
+
+-- list topics
+kafka-topics --list --bootstrap-server `hostname -f`:9092
+
+-- create topic 
+kafka-topics --create --bootstrap-server `hostname -f`:9092 --replication-factor 1 --partitions 1 --topic kafkatopic
+
+-- produce messages
+kafka-console-producer --broker-list `hostname -f`:9092 --topic kafkatopic
+
+--consume messages
+kafka-console-consumer --topic kafkatopic --bootstrap-server `hostname -f`:9092 
+
+--list kafka consumer groups 
+kafka-consumer-groups --bootstrap-server `hostname -f`:9092 --list
+--describe consumer group 
+kafka-consumer-groups --bootstrap-server `hostname -f`:9092 --describe --group console-consumer-87279 
+kafka-consumer-groups --bootstrap-server `hostname -f`:9092 --describe --group console-consumer-87279 --members
+
+--delete topic 
+kafka-topics --bootstrap-server `hostname -f`:9092   --delete --topic kafkatopic1
+
+--describe topic 
+kafka-topics --describe --bootstrap-server `hostname -f`:9092 -- describe all the topic 
+kafka-topics --describe --bootstrap-server `hostname -f`:9092  --topic kafkatopic -- this will describe only kafkatopic 
+
+--add partition to topic 
+kafka-topics --alter --bootstrap-server `hostname -f`:9092 --topic kafkatopic --partitions 3
+
+--dumping log segments
+kafka-run-class kafka.tools.DumpLogSegments --deep-iteration  --files /var/local/kafka/data/kafkatopic-0/00000000000000000000.log 
+
+--get the offset values of the various topics
+kafka-run-class kafka.tools.GetOffsetShell --broker-list `hostname -f`:9092 --topic kafkatopic --time -1
+
+--list zookeeper acls 
+kafka-acls --list  --authorizer-properties zookeeper.connect=zkhost:2181
+
+--adding acls 
+kafka-acls --add --allow-principal user:kafka --operation ALL --topic kafkatopic1 --authorizer-properties  zookeeper.connect=zkhost:2181
+kafka-acls –authorizer-properties zookeeper.connect=<zookeeper>:2181 -add -allow-principal User:<principal> -producer -topic kafka_test2 
+
+--to get the jmx metrics 
+kafka-run-class kafka.tools.JmxTool --object-name "kafka.server:type=kafka-metrics-count"  --jmx-url service:jmx:rmi:///jndi/rmi://localhost:9393/jmxrmi
+
+--see committed offsets in brokers
+kafka-console-consumer --bootstrap-server  `hostname -f`:9092    --topic __consumer_offsets --formatter  "kafka.coordinator.group.GroupMetadataManager\$OffsetsMessageFormatter"
+
+--kafka config 
+ kafka-configs --alter --zookeeper zkhost:2181 --add-config delete.retention.ms=104800000 --entity-type topics --entity-name kafkatopic1
+
+
+--get all brokers 
+echo "ls /kafka/brokers/ids" | /opt/cloudera/parcels/CDH/bin/zookeeper-client -server zkhost:2181 
+--get all topics
+echo "ls /kafka/brokers/topics"  | /opt/cloudera/parcels/CDH/bin/zookeeper-client -server zkhost:2181 
+-- get all the partition for topic 
+echo "ls /kafka/brokers/topics/kafkatopic/partitions" | /opt/cloudera/parcels/CDH/bin/zookeeper-client -server zkhost:2181 
+-- get leader for the partition 
+echo "get /kafka/brokers/topics/kafkatopic/partitions/0/state" | /opt/cloudera/parcels/CDH/bin/zookeeper-client -server zkhost:2181 
+--get coontroller 
+echo "get /kafka/controller" | /opt/cloudera/parcels/CDH/bin/zookeeper-client -server zkhost:2181 
+--controller epoch 
+echo "get /kafka/controller_epoch" | /opt/cloudera/parcels/CDH/bin/zookeeper-client -server zkhost:2181 
+
+--get deleted topics
+echo "get /kafka/admin/delete_topics" | /opt/cloudera/parcels/CDH/bin/zookeeper-client -server zkhost:2181 
+Kafka Delegation Token
+
+cat /tmp/kafka-client.jaas 
+KafkaClient {
+   com.sun.security.auth.module.Krb5LoginModule required
+   debug=true
+   useKeyTab=true
+   storeKey=true
+   serviceName="kafka"
+   keyTab="/keytab/kafka.keytab"
+   principal="kafka/hostnamem@REALM";
+};
+
+cat /tmp/consumer.props 
+security.protocol=SASL_PLAINTEXT
+
+export KAFKA_OPTS="-Djava.security.auth.login.config=/tmp/kafka-client.jaas"
+
+kafka-delegation-tokens  --create   --bootstrap-server `hostname -f`:9092 --command-config /tmp/consumer.props  --max-life-time-period 600000
+
+Calling create token operation with renewers :[] , max-life-time-period :600000
+Created delegation token with tokenId : 6AYwXCAxTBiiwnDYodB--g
+
+TOKENID         HMAC                           OWNER           RENEWERS                  ISSUEDATE       EXPIRYDATE      MAXDATE        
+6AYwXCAxTBiiwnDYodB--g 4OJdZtxlATkZmipahT/gBZPCG7vIflztl7yzGs/n1BrpsXkN+YjLbgbFIesUb4nJKHIWMhfcM1ZSsZv0XsIykw== User:kafka      []                        2020-04-26T01:14 2020-04-26T01:24 2020-04-26T01:24
+
+
+kafka-delegation-tokens --bootstrap-server `hostname`:9092 --describe --command-config /tmp/consumer.props  --owner-principal User:kafka
+Calling describe token operation for owners :[User:kafka]
+Total number of tokens : 1
+
+TOKENID         HMAC                           OWNER           RENEWERS                  ISSUEDATE       EXPIRYDATE      MAXDATE        
+6AYwXCAxTBiiwnDYodB--g 4OJdZtxlATkZmipahT/gBZPCG7vIflztl7yzGs/n1BrpsXkN+YjLbgbFIesUb4nJKHIWMhfcM1ZSsZv0XsIykw== User:kafka      []                        2020-04-26T01:14 2020-04-26T01:24 2020-04-26T01:24
+
+
+How to use Delegation token in kafka producer and consumer can be found here:-
+
+https://github.com/rajkrrsingh/KafkaClients/blob/master/src/main/java/KafkaDelegationTokenExample.java
+
+
+kafka-topics --bootstrap-server=dc-pptekmgr03.bd.novantas.com:9092 --list 
+kafka-topics --bootstrap-server=dc-pptekmgr03.bd.novantas.com:9092 --describe --topic ATLAS_HOOK
+kafka-topics --bootstrap-server dc-pptekmgr03.bd.novantas.com:9092  --delete --topic ATLAS_HOOK
+
+get /kafka/brokers/topics/ATLAS_HOOK
+rmr /kafka/brokers/topics/ATLAS_HOOK
